@@ -35,6 +35,9 @@ class RiskLevel(str, enum.Enum):
     LOW = "Low"
     MEDIUM = "Medium"
     HIGH = "High"
+    # NOTE: Intentionally kept at 3 tiers (Low/Medium/High) per scope decision.
+    # A 4th "Critical" tier was considered but deferred to avoid frontend
+    # color-coding changes close to deadline. This is not an oversight.
 
 
 class NodeStatus(str, enum.Enum):
@@ -59,6 +62,10 @@ class Zone(Base):
     description = Column(String, nullable=True)
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)
+    # Static geospatial features computed once per zone from satellite/DEM data
+    slope = Column(Float, nullable=True)          # degrees, from SRTM DEM
+    ndvi = Column(Float, nullable=True)           # vegetation index from Sentinel-2
+    landslide_density = Column(Float, nullable=True)  # historical landslide count per unit area
     created_at = Column(DateTime(timezone=True), default=utcnow)
 
     sensor_nodes = relationship("SensorNode", back_populates="zone")

@@ -42,6 +42,10 @@ class ZoneOut(BaseModel):
     description: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
+    # Static geospatial features computed once per zone from satellite/DEM data
+    slope: Optional[float] = None          # degrees, from SRTM DEM
+    ndvi: Optional[float] = None           # vegetation index from Sentinel-2
+    landslide_density: Optional[float] = None  # historical landslide count per unit area
     created_at: datetime
 
 

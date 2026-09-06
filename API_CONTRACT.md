@@ -1,4 +1,4 @@
-# TerraGuard API Contract (v0.1)
+# TerraGuard API Contract (v0.2)
 
 Base URL (local dev): `http://localhost:8000`
 Interactive docs (try every endpoint in-browser): `http://localhost:8000/docs`
@@ -12,7 +12,7 @@ All request/response bodies are JSON. All timestamps are ISO-8601 UTC.
 ### List zones
 `GET /api/v1/zones`
 ```json
-[{ "id": 1, "name": "Sohra Ridge", "description": "...", "latitude": 25.28, "longitude": 91.72, "created_at": "..." }]
+[{ "id": 1, "name": "Sohra (Cherrapunji), Meghalaya", "description": "Steep hillside sector near Sohra (Cherrapunji)", "latitude": 25.2840, "longitude": 91.7273, "slope": 25.0, "ndvi": 0.8, "landslide_density": 0.6, "created_at": "..." }]
 ```
 
 ### Latest sensor readings for a zone (one per node)
@@ -39,7 +39,7 @@ Array of the same shape as above.
 ### Alert log
 `GET /api/v1/alerts?zone_id=1` (zone_id optional — omit for all zones)
 ```json
-[{ "id": 1, "zone_id": 1, "risk_prediction_id": 28, "triggered_at": "...", "alert_type": "simulated", "recipient": null, "message": "HIGH landslide risk detected in zone 'Sohra Ridge' (score=0.964).", "status": "simulated" }]
+[{ "id": 1, "zone_id": 1, "risk_prediction_id": 28, "triggered_at": "...", "alert_type": "simulated", "recipient": null, "message": "HIGH landslide risk detected in zone 'Sohra (Cherrapunji), Meghalaya' (score=0.964).", "status": "simulated" }]
 ```
 
 ---
@@ -49,11 +49,11 @@ Array of the same shape as above.
 You don't need to touch the API at all. Everything you need is **one function** in `app/ml_client.py`:
 
 ```python
-def predict_risk(soil_moisture, tilt_angle, vibration, rainfall_mm) -> tuple[float, RiskLevel]:
+def predict_risk(soil_moisture, rainfall_mm, slope, ndvi, landslide_density) -> tuple[float, RiskLevel]:
     ...
 ```
 
-- Inputs: four floats (any may be `None` if that sensor/data isn't available).
+- Inputs: five floats (live features: soil_moisture, rainfall_mm; static zone features: slope, ndvi, landslide_density). Tilt and vibration are NOT model inputs — they are handled as live safety overrides in the risk endpoint.
 - Output: `(risk_score, risk_level)` — `risk_score` is a float 0.0–1.0, `risk_level` is `RiskLevel.LOW / MEDIUM / HIGH` (use the `score_to_level()` helper already in that file to bucket your model's raw score).
 
 Replace the mock body with your real model call (see the comment in the file for the exact swap-in pattern with `joblib`). Nothing else in the backend needs to change — the backend calls this function every time `POST /api/v1/zones/{zone_id}/risk/predict` is hit.
@@ -92,7 +92,7 @@ Replace the mock body with your real model call (see the comment in the file for
 ```json
 { "soil_moisture": 95, "tilt_angle": 40, "vibration": 9, "rainfall_mm": 95 }
 ```
-Body is fully optional — pass `{}` and it uses the zone's latest stored readings/rainfall instead. If the result is `"High"`, an alert fires automatically.
+Body is fully optional — pass `{}` and it uses the zone's latest stored readings/rainfall instead. If the result is `"High"`, an alert fires automatically. Note: tilt_angle and vibration are used only for safety escalation checks, not as ML model inputs.
 
 ### Manually fire an alert (for the live demo)
 `POST /api/v1/alerts/trigger`
@@ -102,7 +102,7 @@ Body is fully optional — pass `{}` and it uses the zone's latest stored readin
 
 ### Seed/reset mock demo data (dev only)
 `POST /api/v1/seed/demo?days_of_history=3&reset=true`
-Populates 3 mock zones, 6 nodes, several days of readings/rainfall, and a run of risk predictions. Use `reset=true` to wipe and re-seed cleanly. **Remove or lock this endpoint down before any real deployment.**
+Populates 4 mock zones, 8 nodes, several days of readings/rainfall, and a run of risk predictions. Use `reset=true` to wipe and re-seed cleanly. **Remove or lock this endpoint down before any real deployment.**
 
 ---
 

@@ -29,9 +29,10 @@ from app.alerts import dispatch_alert
 router = APIRouter(prefix="/api/v1/seed", tags=["seed (dev only)"])
 
 MOCK_ZONES = [
-    {"name": "Sohra Ridge", "description": "Steep hillside sector near Sohra (Cherrapunji)", "latitude": 25.2840, "longitude": 91.7273},
-    {"name": "Kohima Slope-3", "description": "Terraced slope, historically prone to slippage", "latitude": 25.6751, "longitude": 94.1086},
-    {"name": "Gangtok East Bank", "description": "River-adjacent slope with loose sediment", "latitude": 27.3389, "longitude": 88.6065},
+    {"name": "Sohra (Cherrapunji), Meghalaya", "description": "Steep hillside sector near Sohra (Cherrapunji)", "latitude": 25.2840, "longitude": 91.7273, "slope": 25.0, "ndvi": 0.8, "landslide_density": 0.6},
+    {"name": "Mawsynram, Meghalaya", "description": "Terraced slope, historically prone to slippage", "latitude": 25.2971, "longitude": 91.5809, "slope": 20.0, "ndvi": 0.75, "landslide_density": 0.5},
+    {"name": "Aizawl, Mizoram", "description": "River-adjacent slope with loose sediment", "latitude": 23.7271, "longitude": 92.7176, "slope": 30.0, "ndvi": 0.6, "landslide_density": 0.7},
+    {"name": "NH6 Corridor - Shillong Approach", "description": "Steep hillside sector near Shillong approach on NH6", "latitude": 25.5788, "longitude": 91.8933, "slope": 15.0, "ndvi": 0.5, "landslide_density": 0.3},
 ]
 
 
@@ -161,7 +162,31 @@ def seed_demo_data(
             vibration = reading.vibration if reading else None
             rainfall_mm = rainfall.rainfall_mm if rainfall else None
 
-            score, level = predict_risk(soil_moisture, tilt_angle, vibration, rainfall_mm)
+            # Call predict_risk with live + static features (tilt and vibration are NOT model inputs)
+            score, level = predict_risk(
+                soil_moisture if soil_moisture is not None else 0.0,
+                rainfall_mm if rainfall_mm is not None else 0.0,
+                zone.slope if zone.slope is not None else 0.0,
+                zone.ndvi if zone.ndvi is not None else 0.0,
+                zone.landslide_density if zone.landslide_density is not None else 0.0,
+            )
+
+            # Check for tilt escalation as a safety override
+            tilt_escalation_applied = False
+            if tilt_angle is not None and level in (models.RiskLevel.MEDIUM, models.RiskLevel.HIGH):
+                # Use a reasonable baseline - for demo, assume baseline is 2 degrees
+                # (normal resting tilt for a stable slope)
+                tilt_baseline = 2.0
+                from app.ml_client import check_tilt_escalation
+                if check_tilt_escalation(tilt_angle, tilt_baseline):
+                    # Escalate risk level by one step, but not above HIGH
+                    if level == models.RiskLevel.MEDIUM:
+                        level = models.RiskLevel.HIGH
+                    elif level == models.RiskLevel.LOW:
+                        level = models.RiskLevel.MEDIUM
+                    # Don't escalate if already HIGH
+                    tilt_escalation_applied = True
+
             prediction = models.RiskPrediction(
                 zone_id=zone.id,
                 timestamp=ts,
@@ -170,9 +195,13 @@ def seed_demo_data(
                 model_version="mock-v0-seed",
                 input_features={
                     "soil_moisture": soil_moisture,
+                    "rainfall_mm": rainfall_mm,
+                    "slope": zone.slope,
+                    "ndvi": zone.ndvi,
+                    "landslide_density": zone.landslide_density,
                     "tilt_angle": tilt_angle,
                     "vibration": vibration,
-                    "rainfall_mm": rainfall_mm,
+                    "tilt_escalation_applied": tilt_escalation_applied,
                 },
             )
             db.add(prediction)

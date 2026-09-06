@@ -74,7 +74,30 @@ def trigger_prediction(
         if latest_rainfall:
             rainfall_mm = latest_rainfall.rainfall_mm
 
-    score, level = predict_risk(soil_moisture, tilt_angle, vibration, rainfall_mm)
+    # Call predict_risk with live + static features (tilt and vibration are NOT model inputs)
+    score, level = predict_risk(
+        soil_moisture if soil_moisture is not None else 0.0,
+        rainfall_mm if rainfall_mm is not None else 0.0,
+        zone.slope if zone.slope is not None else 0.0,
+        zone.ndvi if zone.ndvi is not None else 0.0,
+        zone.landslide_density if zone.landslide_density is not None else 0.0,
+    )
+
+    # Check for tilt escalation as a safety override
+    tilt_escalation_applied = False
+    if tilt_angle is not None and level in (models.RiskLevel.MEDIUM, models.RiskLevel.HIGH):
+        # Use a reasonable baseline - for demo, assume baseline is 2 degrees
+        # (normal resting tilt for a stable slope)
+        tilt_baseline = 2.0
+        from app.ml_client import check_tilt_escalation
+        if check_tilt_escalation(tilt_angle, tilt_baseline):
+            # Escalate risk level by one step, but not above HIGH
+            if level == models.RiskLevel.MEDIUM:
+                level = models.RiskLevel.HIGH
+            elif level == models.RiskLevel.LOW:
+                level = models.RiskLevel.MEDIUM
+            # Don't escalate if already HIGH
+            tilt_escalation_applied = True
 
     prediction = models.RiskPrediction(
         zone_id=zone_id,
@@ -83,9 +106,13 @@ def trigger_prediction(
         model_version="mock-v0",
         input_features={
             "soil_moisture": soil_moisture,
+            "rainfall_mm": rainfall_mm,
+            "slope": zone.slope,
+            "ndvi": zone.ndvi,
+            "landslide_density": zone.landslide_density,
             "tilt_angle": tilt_angle,
             "vibration": vibration,
-            "rainfall_mm": rainfall_mm,
+            "tilt_escalation_applied": tilt_escalation_applied,
         },
     )
     db.add(prediction)
