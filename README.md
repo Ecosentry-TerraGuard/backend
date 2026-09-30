@@ -1,6 +1,6 @@
 # TerraGuard Backend
 
-Backend for TerraGuard — AI-powered landslide early warning system, built for SIH26001.
+Backend for TerraGuard — AI-powered landslide early warning system, built for SIH26206.
 
 ## Overview
 
